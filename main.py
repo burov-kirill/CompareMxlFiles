@@ -6,9 +6,12 @@ import os
 import queue
 import re
 import sys
+import threading
 import time
 import pandas as pd
 from threading import Thread
+import multiprocessing
+import concurrent.futures as pool
 import PySimpleGUI as sg
 from openpyxl.formatting import Rule
 from openpyxl.formatting.rule import ColorScaleRule, FormulaRule
@@ -28,11 +31,19 @@ class ThreadWithReturnValue(Thread):
                  args=(), kwargs={}, Verbose=None):
         Thread.__init__(self, group, target, name, args, kwargs)
         self._return = None
+        self._stop_event = threading.Event()
+
 
     def run(self):
         if self._target is not None:
             self._return = self._target(*self._args,
                                         **self._kwargs)
+
+    def stop(self):
+        self._stop_event.set()
+
+    def stopped(self):
+        return self._stop_event.is_set()
 
     def join(self, *args):
         Thread.join(self, *args)
@@ -118,8 +129,8 @@ def prepare_result_notes(first_file, second_file, compare_result):
     ratio_task = ThreadWithReturnValue(target=get_compare_ratio, args=[first_file, second_file])
     ratio_task.start()
     ratio_note = ratio_task.join(10)
-    # ratio_note = round(get_compare_ratio(first_file, second_file), 2)
-    if ratio_note is None:
+    if ratio_task.is_alive():
+        ratio_task.stop()
         ratio_note = 0.0
     ratio_note = round(ratio_note, 2)
     for key, value in zip(keys, [first_shrt_name, second_shrt_name, ratio_note, compare_dict[compare_result]]):
@@ -139,11 +150,11 @@ def decorate_file(res_frame, save_path):
 
     red = Font(color='9C0006')
     red_dxf = DifferentialStyle(font=red, fill=redFill)
-    red_rule = Rule(type="containsText", text="Файлы отличаются", dxf=red_dxf)
+    red_rule = Rule(type="expression", formula=['NOT(ISERROR(SEARCH("Файлы отличаются",D2)))'], text="Файлы отличаются", dxf=red_dxf, stopIfTrue=True)
 
     green = Font(color='006100')
     green_dxf = DifferentialStyle(font=green, fill=greenFill)
-    green_rule = Rule(type="containsText", text="Файлы идентичны", dxf=green_dxf)
+    green_rule = Rule(type='expression',formula=['NOT(ISERROR(SEARCH("Файлы идентичны",D2)))'],  text="Файлы идентичны", dxf=green_dxf, stopIfTrue=True)
     workbook = load_workbook(filename=save_path)
     ws = workbook.active
     ws.title = 'Сверка файлов'
