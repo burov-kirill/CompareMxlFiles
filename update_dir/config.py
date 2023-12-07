@@ -1,4 +1,4 @@
-ZIP_URL = 'https://raw.githubusercontent.com/burov-kirill/CompareMxlFiles/master/dist/CompareMxlFIles.7z'
+ZIP_URL = 'https://raw.githubusercontent.com/burov-kirill/CompareMxlFiles/master/dist/CompareMXL.7z'
 APP_NAME = 'CompareMXL.exe'
 VERSION = '1.0.3'
 VERSION_URL = 'https://raw.githubusercontent.com/burov-kirill/CompareMxlFiles/master/__VERS__.txt'
