@@ -113,29 +113,28 @@ def parse_data(file):
         return data_list
 
 
-def get_compare_ratio(first_file, second_file):
+def get_compare_ratio(first_file, second_file, ratio_dict):
     with open(first_file, 'r', encoding='utf-8') as f1, open(second_file, 'r', encoding='utf-8') as f2:
         seq_mat = difflib.SequenceMatcher()
         file1 = f1.read()
         file2 = f2.read()
         seq_mat.set_seqs(file1, file2)
-        ratio = seq_mat.real_quick_ratio()
-        return ratio
+        ratio_dict['ratio_coeff'] = seq_mat.real_quick_ratio()
 
 def prepare_result_notes(first_file, second_file, compare_result):
     result_dict = dict()
+    ratio_dict = multiprocessing.Manager().dict()
     keys = ['БИТ.Финанс файл', 'БИТ.Строительство файл', 'Коэффициент подобия', 'Результат сверки']
     first_shrt_name, second_shrt_name = get_short_name(first_file), get_short_name(second_file)
-    ratio_task = ThreadWithReturnValue(target=get_compare_ratio, args=[first_file, second_file])
-    ratio_task.setDaemon(True)
+    ratio_task = multiprocessing.Process(target=get_compare_ratio, args=[first_file, second_file, ratio_dict])
     ratio_task.start()
-    ratio_note = ratio_task.join(10)
+    ratio_task.join(10)
     if ratio_task.is_alive():
+        ratio_task.terminate()
+    if ratio_dict.values() == []:
         ratio_note = 0.0
-        ratio_task.stop()
-        while not ratio_task.stopped():
-            pass
-    ratio_note = round(ratio_note, 2)
+    else:
+        ratio_note = round(ratio_dict['ratio_coeff'],2)
     for key, value in zip(keys, [first_shrt_name, second_shrt_name, ratio_note, compare_dict[compare_result]]):
         result_dict[key] = value
     return result_dict
@@ -182,7 +181,7 @@ def decorate_file(res_frame, save_path):
         max_width = max(data_list) + INDENT
         ws.column_dimensions[get_column_letter(i)].width = max_width
 
-    for i in range(1, len(res_frame)+1):
+    for i in range(1, len(res_frame)+2):
         ws.cell(row=i, column=3).number_format = '0.00%'
     workbook.save(save_path)
 
