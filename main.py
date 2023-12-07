@@ -133,7 +133,7 @@ def prepare_result_notes(first_file, second_file, compare_result):
     if ratio_task.is_alive():
         ratio_task.terminate()
     if ratio_dict.values() == []:
-        ratio_note = 0.0
+        ratio_note = '!Не определен'
     else:
         ratio_note = round(ratio_dict['ratio_coeff'],2)
     for key, value in zip(keys, [first_shrt_name, second_shrt_name, ratio_note, compare_dict[compare_result]]):
@@ -227,10 +227,10 @@ if __name__ == '__main__':
 
     # Инициализация прогрессбара
     progressbar = [[sg.ProgressBar(len(files_dict), size=(100, 20),  orientation='h', key='pg_bar')]]
-    outputwin = [[sg.Output(key='out', size=(100, 20))]]
+    outputwin = [[sg.Output(key='out', size=(100, 40))]]
     layout = [
         [sg.Frame('Прогресс', layout=progressbar, background_color='#007bfb', size=(400, 50), key='prg_frame')],
-        [sg.Frame('Файл', layout=outputwin,  background_color='#007bfb', size=(400, 50))]
+        [sg.Frame('Обрабатываемые файлы', layout=outputwin,  background_color='#007bfb', size=(400, 100))]
     ]
     window = sg.Window('Работа', layout=layout, finalize=True, element_justification='center', background_color='#007bfb')
     pg_bar = window['pg_bar']
@@ -262,7 +262,7 @@ if __name__ == '__main__':
         result_frame = pd.DataFrame(compare_result)
         write_results(result_frame, save_path)
     except Exception as exp:
-        log.info('!Возникла непредвиденная ошибка')
+        log.info('!Возникла непредвиденная ошибка при оформлении сводного файла')
         log.exception(exp)
         error()
     else:
