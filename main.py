@@ -127,6 +127,7 @@ def prepare_result_notes(first_file, second_file, compare_result):
     keys = ['БИТ.Финанс файл', 'БИТ.Строительство файл', 'Коэффициент подобия', 'Результат сверки']
     first_shrt_name, second_shrt_name = get_short_name(first_file), get_short_name(second_file)
     ratio_task = ThreadWithReturnValue(target=get_compare_ratio, args=[first_file, second_file])
+    ratio_task.setDaemon(True)
     ratio_task.start()
     ratio_note = ratio_task.join(10)
     if ratio_task.is_alive():
