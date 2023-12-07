@@ -6,12 +6,15 @@ import os
 import queue
 import re
 import sys
+import time
 import pandas as pd
 from threading import Thread
 import PySimpleGUI as sg
+from openpyxl.formatting import Rule
 from openpyxl.formatting.rule import ColorScaleRule, FormulaRule
 from openpyxl.reader.excel import load_workbook
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Font
+from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
@@ -112,7 +115,13 @@ def prepare_result_notes(first_file, second_file, compare_result):
     result_dict = dict()
     keys = ['БИТ.Финанс файл', 'БИТ.Строительство файл', 'Коэффициент подобия', 'Результат сверки']
     first_shrt_name, second_shrt_name = get_short_name(first_file), get_short_name(second_file)
-    ratio_note = round(get_compare_ratio(first_file, second_file), 2)
+    ratio_task = ThreadWithReturnValue(target=get_compare_ratio, args=[first_file, second_file])
+    ratio_task.start()
+    ratio_note = ratio_task.join(10)
+    # ratio_note = round(get_compare_ratio(first_file, second_file), 2)
+    if ratio_note is None:
+        ratio_note = 0.0
+    ratio_note = round(ratio_note, 2)
     for key, value in zip(keys, [first_shrt_name, second_shrt_name, ratio_note, compare_dict[compare_result]]):
         result_dict[key] = value
     return result_dict
@@ -127,6 +136,14 @@ def decorate_file(res_frame, save_path):
     redFill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
     greenFill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
     COEFF_RANGE, RESULT_RANGE = f'C2:C{1 + len(res_frame)}', f'D2:D{1 + len(res_frame)}'
+
+    red = Font(color='9C0006')
+    red_dxf = DifferentialStyle(font=red, fill=redFill)
+    red_rule = Rule(type="containsText", text="Файлы отличаются", dxf=red_dxf)
+
+    green = Font(color='006100')
+    green_dxf = DifferentialStyle(font=green, fill=greenFill)
+    green_rule = Rule(type="containsText", text="Файлы идентичны", dxf=green_dxf)
     workbook = load_workbook(filename=save_path)
     ws = workbook.active
     ws.title = 'Сверка файлов'
@@ -135,20 +152,24 @@ def decorate_file(res_frame, save_path):
                                showLastColumn=False, showRowStripes=True, showColumnStripes=True)
     table.tableStyleInfo = style
     ws.add_table(table)
-    ws.conditional_formatting.add(COEFF_RANGE, ColorScaleRule(start_type='min', start_color='F8696B',  mid_type='percentile', mid_value=50, mid_color='FCFCFF',
+    ws.conditional_formatting.add(COEFF_RANGE, ColorScaleRule(start_type='min', start_color='F8696B',
                                                             end_type = 'max', end_color = '63BE7B'))
 
-    ws.conditional_formatting.add(RESULT_RANGE, FormulaRule(formula=['NOT(ISERROR(SEARCH("Файлы идентичны",D2)))'], stopIfTrue=True,
-                                                          fill=greenFill))
-    ws.conditional_formatting.add(RESULT_RANGE, FormulaRule(formula=['NOT(ISERROR(SEARCH("Файлы отличаются",D2)))'], stopIfTrue=True,
-                                                          fill=redFill))
+    # ws.conditional_formatting.add(RESULT_RANGE, FormulaRule(formula=['NOT(ISERROR(SEARCH("Файлы идентичны",D2)))'], stopIfTrue=True,
+    #                                                       fill=greenFill))
+    # ws.conditional_formatting.add(RESULT_RANGE, FormulaRule(formula=['NOT(ISERROR(SEARCH("Файлы отличаются",D2)))'], stopIfTrue=True,
+    #                                                       fill=redFill))
+
+    ws.conditional_formatting.add(RESULT_RANGE, red_rule)
+    ws.conditional_formatting.add(RESULT_RANGE, green_rule)
     for i, column in enumerate(res_frame.columns, 1):
         data_list = [len(str(value)) for value in res_frame[column]]
         data_list.append(len(column))
         max_width = max(data_list) + INDENT
         ws.column_dimensions[get_column_letter(i)].width = max_width
-    col = ws.column_dimensions['C']
-    col.number_format = '0.00%'
+
+    for i in range(1, len(res_frame)+1):
+        ws.cell(row=i, column=3).number_format = '0.00%'
     workbook.save(save_path)
 
 

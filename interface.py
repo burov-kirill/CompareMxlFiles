@@ -47,7 +47,7 @@ def start():
             [sg.Column([[sg.Input(key='save_folder'), sg.FolderBrowse(button_text='Выбрать')]])],
             [sg.OK(button_text='Далее'), sg.Cancel(button_text='Выход')]
 
-        ], key='-FILE_PANEL-', visible=True, size=(420, 270), background_color='#007bfb')]
+        ], key='-FILE_PANEL-', visible=True, size=(420, 300), background_color='#007bfb')]
     layout = [
             [sg.Frame(layout=[UPD_FRAME], title='Обновление', key='--UPD_FRAME--')],
             [sg.Frame(layout=[PANEL], title='Выбор файлов')]]
