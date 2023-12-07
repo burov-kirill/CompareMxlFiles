@@ -126,6 +126,7 @@ def prepare_result_notes(first_file, second_file, compare_result):
     ratio_dict = multiprocessing.Manager().dict()
     keys = ['БИТ.Финанс файл', 'БИТ.Строительство файл', 'Коэффициент подобия', 'Результат сверки']
     first_shrt_name, second_shrt_name = get_short_name(first_file), get_short_name(second_file)
+    # ratio_note = 0.5
     ratio_task = multiprocessing.Process(target=get_compare_ratio, args=[first_file, second_file, ratio_dict])
     ratio_task.start()
     ratio_task.join(10)
@@ -212,6 +213,7 @@ def main_task(files_dict, is_single):
     return result_list
 
 if __name__ == '__main__':
+    multiprocessing.freeze_support()
     values = start()
     fin_folder, build_folder, save_folder = values['fin_ipt'], values['build_ipt'], values['save_folder']
     is_single_file = values['is_single_file']
