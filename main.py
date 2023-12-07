@@ -131,8 +131,10 @@ def prepare_result_notes(first_file, second_file, compare_result):
     ratio_task.start()
     ratio_note = ratio_task.join(10)
     if ratio_task.is_alive():
-        ratio_task.stop()
         ratio_note = 0.0
+        ratio_task.stop()
+        while not ratio_task.stopped():
+            pass
     ratio_note = round(ratio_note, 2)
     for key, value in zip(keys, [first_shrt_name, second_shrt_name, ratio_note, compare_dict[compare_result]]):
         result_dict[key] = value
