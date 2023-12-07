@@ -54,7 +54,7 @@ def start():
     yeet = sg.Window('Сверка данных файлов', layout=layout)
     check, upd_check = False, True
     while True:
-        event, values = yeet.read(timeout=100)
+        event, values = yeet.read()
         if check:
             upd_check = check_version()
             check = False
