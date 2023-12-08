@@ -2,28 +2,28 @@ import difflib
 import filecmp
 import glob
 import hashlib
+import logging
 import os
 import queue
 import re
 import sys
 import threading
-import time
+from logging.handlers import QueueListener, QueueHandler
+
 import pandas as pd
 from threading import Thread
 import multiprocessing
-import concurrent.futures as pool
 import PySimpleGUI as sg
 from openpyxl.formatting import Rule
 from openpyxl.formatting.rule import ColorScaleRule, FormulaRule
 from openpyxl.reader.excel import load_workbook
-from openpyxl.styles import PatternFill, Font
+from openpyxl.styles import PatternFill, Font, Alignment
 from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 from create_frame import create_dataframe_from_file
 from interface import start, end, error
-from logs import log
 from queue import Empty
 class ThreadWithReturnValue(Thread):
 
@@ -48,7 +48,7 @@ class ThreadWithReturnValue(Thread):
     def join(self, *args):
         Thread.join(self, *args)
         return self._return
-
+logging.basicConfig(level=logging.INFO)
 compare_dict = {True: 'Файлы идентичны', False: 'Файлы отличаются'}
 FORMAT = '*.mxl'
 RESULT_FILE_NAME = 'Результат сверки.xlsx'
@@ -58,8 +58,10 @@ def get_files(path):
     folder = path[path.rfind('/')+1:]
     return file_list, folder
 
-def create_files_dict(file_list1, direct_name1, file_list2, direct_name2):
+def create_files_dict(file_list1, direct_name1, file_list2, direct_name2, loq_queue):
     # Связать файлы
+    logger = logging.getLogger(__name__)
+    logger.addHandler(QueueHandler(log_queue))
     files_dict = dict()
     for file in file_list1:
         short_name = get_short_name(file)
@@ -74,6 +76,8 @@ def create_files_dict(file_list1, direct_name1, file_list2, direct_name2):
         # Записать в лог файл!!!
         unmatched_note1 = f'Для следующих файлов из папки {direct_name1} не были найдены соответствия в папке {direct_name2}:\n{str_list1}'
         unmatched_note2 = f'Для следующих файлов из папки {direct_name2} не были найдены соответствия в папке {direct_name1}:\n{str_list2}'
+        logger.info(unmatched_note1)
+        logger.info(unmatched_note2)
         # write_results(unmatched_note1, unmatched_note2)
     return files_dict
 
@@ -169,10 +173,6 @@ def decorate_file(res_frame, save_path):
     ws.conditional_formatting.add(COEFF_RANGE, ColorScaleRule(start_type='min', start_color='F8696B',
                                                             end_type = 'max', end_color = '63BE7B'))
 
-    # ws.conditional_formatting.add(RESULT_RANGE, FormulaRule(formula=['NOT(ISERROR(SEARCH("Файлы идентичны",D2)))'], stopIfTrue=True,
-    #                                                       fill=greenFill))
-    # ws.conditional_formatting.add(RESULT_RANGE, FormulaRule(formula=['NOT(ISERROR(SEARCH("Файлы отличаются",D2)))'], stopIfTrue=True,
-    #                                                       fill=redFill))
 
     ws.conditional_formatting.add(RESULT_RANGE, red_rule)
     ws.conditional_formatting.add(RESULT_RANGE, green_rule)
@@ -184,14 +184,22 @@ def decorate_file(res_frame, save_path):
 
     for i in range(1, len(res_frame)+2):
         ws.cell(row=i, column=3).number_format = '0.00%'
+        ws.cell(row=i, column=3).alignment=Alignment(horizontal='right',
+                                                     vertical='top',
+                                                     text_rotation=0,
+                                                     wrap_text=False,
+                                                     shrink_to_fit=False,
+                                                     indent=0)
     workbook.save(save_path)
 
 
 def get_short_name(abs_path):
     return os.path.basename(abs_path)
 
-def main_task(files_dict, is_single):
+def main_task(files_dict, is_single, log_queue):
     global q
+    logger = logging.getLogger(__name__)
+    logger.addHandler(QueueHandler(log_queue))
     result_list = []
     counter = 0
     for k, v in files_dict.items():
@@ -202,18 +210,22 @@ def main_task(files_dict, is_single):
             res = compare_only_data_in_files(k, v, is_single)
         except Exception as exp:
             # Запись лога исключения
-            log.info(f'При обработке следующих файлов {k}, {v} возникло исключение:\n')
-            log.exception(exp)
+            logger.info(f'При обработке следующих файлов {k}, {v} возникло исключение:\n')
+            logger.exception(exp)
         else:
             result_list.append(res)
             # Запись лога успешной обработки
-            log.info(f'Обработка следующих файлов {k}, {v} успешно завершена\n')
+            logger.info(f'Обработка следующих файлов {k}, {v} успешно завершена\n')
         finally:
             q.put(counter)
     return result_list
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
+    log_queue = multiprocessing.Queue(-1)
+    file_handler = logging.FileHandler("logs.log", mode='w')
+    queue_listener = QueueListener(log_queue, file_handler)
+    queue_listener.start()
     values = start()
     fin_folder, build_folder, save_folder = values['fin_ipt'], values['build_ipt'], values['save_folder']
     is_single_file = values['is_single_file']
@@ -221,7 +233,7 @@ if __name__ == '__main__':
     if not is_single_file:
         fin_files, fin_folder_name = get_files(fin_folder)
         build_files, build_folder_name = get_files(build_folder)
-        files_dict = create_files_dict(fin_files, fin_folder_name,  build_files, build_folder_name)
+        files_dict = create_files_dict(fin_files, fin_folder_name,  build_files, build_folder_name, log_queue)
     else:
         files_dict = {fin_folder:build_folder}
 
@@ -232,11 +244,11 @@ if __name__ == '__main__':
         [sg.Frame('Прогресс', layout=progressbar, background_color='#007bfb', size=(400, 50), key='prg_frame')],
         [sg.Frame('Обрабатываемые файлы', layout=outputwin,  background_color='#007bfb', size=(400, 100))]
     ]
-    window = sg.Window('Работа', layout=layout, finalize=True, element_justification='center', background_color='#007bfb')
+    window = sg.Window('Сравнение файлов', layout=layout, finalize=True, element_justification='center', background_color='#007bfb')
     pg_bar = window['pg_bar']
     out = window['out']
     q = queue.Queue()
-    worker_task = ThreadWithReturnValue(target=main_task, args=[files_dict, is_single_file])
+    worker_task = ThreadWithReturnValue(target=main_task, args=[files_dict, is_single_file, log_queue])
     worker_task.setDaemon(True)
     worker_task.start()
     while True:
@@ -262,10 +274,14 @@ if __name__ == '__main__':
         result_frame = pd.DataFrame(compare_result)
         write_results(result_frame, save_path)
     except Exception as exp:
-        log.info('!Возникла непредвиденная ошибка при оформлении сводного файла')
-        log.exception(exp)
+        logger = logging.getLogger(__name__)
+        logger.addHandler(QueueHandler(log_queue))
+        logger.info('!Возникла непредвиденная ошибка при оформлении сводного файла')
+        logger.exception(exp)
+        queue_listener.stop()
         error()
     else:
+        queue_listener.stop()
         end(save_path)
 
 
